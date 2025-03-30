@@ -2,14 +2,15 @@
 
 import { useEffect } from 'react';
 import { 
-  ResultsDisplay, 
-  SpeedGraph, 
   ErrorDisplay, 
   SummaryMessage,
   TestButton,
-  UnitToggle
+  UnitToggle,
+  SpeedGraph
 } from '../components/speedtest';
+import NetworkInfoDisplay from '../components/speedtest/NetworkInfoDisplay';
 import { useSpeedTest } from '../hooks/useSpeedTest';
+import { useNetworkInfo } from '../hooks/useNetworkInfo';
 
 export default function Home() {
   const {
@@ -28,8 +29,12 @@ export default function Home() {
     startTestFlow
   } = useSpeedTest();
 
+  const { networkInfo, loading, error: networkError } = useNetworkInfo();
+
   // Auto-start on mount
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const controller = new AbortController();
     startTestFlow(controller);
 
@@ -42,62 +47,73 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-gradient-to-br from-gray-900 via-slate-900 to-black text-gray-200 font-sans">
+    <main className="flex min-h-screen w-full flex-col items-center p-3 sm:p-4 bg-gradient-to-br from-gray-900 via-slate-900 to-black text-gray-200 font-sans overflow-hidden">
       {/* Settings Toggle */}
-      <UnitToggle displayUnit={displayUnit} toggleUnit={toggleUnit} />
+      <div className="w-full max-w-5xl flex flex-wrap justify-end items-center mb-1">
+        <UnitToggle displayUnit={displayUnit} toggleUnit={toggleUnit} />
+      </div>
 
       {/* Content Container */}
-      <div className="flex flex-col items-center justify-center flex-grow w-full mt-12 sm:mt-8">
-        <div className="w-full max-w-3xl mx-auto text-center flex flex-col items-center">
+      <div className="flex flex-col items-center justify-center w-full flex-grow max-h-[calc(100vh-6rem)]">
+        <div className="w-full max-w-5xl mx-auto text-center flex flex-col items-center">
           {/* Heading */}
-          <h1 className="text-3xl sm:text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-500">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-500">
             Speed Test
           </h1>
-          <p className="text-sm text-indigo-300/90 italic mb-8 px-4">
+          <p className="text-xs text-indigo-300/90 italic mb-2 px-4">
             Focus. Speed. I am... checking your internet! Ready? Ka-chow!
           </p>
 
-          {/* Graph and Status Area */}
-          <SpeedGraph
-            graphData={graphData}
-            displayUnit={displayUnit}
-            testStage={testStage}
-            isTesting={isTesting}
-            currentSpeedMbps={displayCurrentSpeed}
-            statusText={statusText}
-            error={error}
-          />
+          {/* Main Content Area */}
+          <div className="w-full flex flex-col h-full space-y-3">
+            {/* Connection Information - Enhanced size */}
+            <div className="w-full animate-fadeIn">
+              <NetworkInfoDisplay networkInfo={networkInfo} loading={loading} />
+            </div>
 
-          {/* Error Message Area */}
-          <ErrorDisplay error={error} />
+            {/* Speed Test Components */}
+            <div className="w-full space-y-3 animate-fadeIn flex-grow">
+              {/* Integrated Graph & Results Area */}
+              <SpeedGraph
+                graphData={graphData}
+                displayUnit={displayUnit}
+                testStage={testStage}
+                isTesting={isTesting}
+                currentSpeedMbps={displayCurrentSpeed}
+                statusText={statusText}
+                error={error}
+                compact={false}
+                ping={ping}
+                downloadSpeed={displayDownloadSpeed}
+                uploadSpeed={displayUploadSpeed}
+              />
 
-          {/* Results Display */}
-          <ResultsDisplay
-            testStage={testStage}
-            isTesting={isTesting}
-            ping={ping}
-            downloadSpeed={displayDownloadSpeed}
-            uploadSpeed={displayUploadSpeed}
-            displayUnit={displayUnit}
-          />
+              {/* Error Message Area */}
+              {error && <ErrorDisplay error={error} />}
 
-          {/* Test Button */}
-          <TestButton isTesting={isTesting} onRestart={handleRestartTest} />
+              {/* Centered Test Button */}
+              <div className="flex justify-center">
+                <TestButton isTesting={isTesting} onRestart={handleRestartTest} />
+              </div>
 
-          {/* Summary Message Area */}
-          <SummaryMessage
-            testStage={testStage}
-            isTesting={isTesting}
-            error={error}
-            downloadSpeed={displayDownloadSpeed}
-            uploadSpeed={displayUploadSpeed}
-            displayUnit={displayUnit}
-          />
+              {/* Summary Message Area - Assessment only */}
+              <div className="flex justify-center w-full">
+                <SummaryMessage
+                  testStage={testStage}
+                  isTesting={isTesting}
+                  error={error}
+                  downloadSpeed={displayDownloadSpeed}
+                  uploadSpeed={displayUploadSpeed}
+                  displayUnit={displayUnit}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="w-full text-center text-gray-500 text-xs mt-auto pt-6 pb-4 px-4">
+      <footer className="w-full text-center text-gray-500 text-xs py-2">
         Powered by Kavin ;)
       </footer>
     </main>

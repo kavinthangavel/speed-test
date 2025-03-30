@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiWifiOff } from 'react-icons/fi';
+import { FiAlertTriangle } from 'react-icons/fi';
 
 interface ErrorDisplayProps {
   error: string | null;
@@ -9,10 +9,11 @@ const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error }) => {
   if (!error) return null;
   
   return (
-    <div className="w-full max-w-md mx-auto min-h-[40px] flex items-center justify-center mb-6 px-2">
-      <div role="alert" className="p-3 bg-red-900/50 border border-red-700/60 rounded-lg text-red-200 flex items-center justify-center gap-3 w-full backdrop-blur-sm transition-opacity duration-300 text-sm shadow-md">
-        <FiWifiOff size={18} className="flex-shrink-0 text-red-400" />
-        <span className="text-center">{error}</span>
+    <div className="bg-red-900/30 border border-red-800/50 text-red-200 p-2 rounded-lg text-xs flex items-start">
+      <FiAlertTriangle className="text-red-400 mr-1.5 mt-0.5 flex-shrink-0" />
+      <div>
+        <p className="font-semibold mb-0.5">Error</p>
+        <p className="opacity-90">{error}</p>
       </div>
     </div>
   );

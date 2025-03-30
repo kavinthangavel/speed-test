@@ -14,7 +14,7 @@ export const useSpeedTest = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [testStage, setTestStage] = useState<TestStage>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [displayUnit, setDisplayUnit] = useState<SpeedUnit>('Mbps');
+  const [displayUnit, setDisplayUnit] = useState<SpeedUnit>('MB/s');
   const [downloadHistory, setDownloadHistory] = useState<SpeedDataPoint[]>([]);
   const [uploadHistory, setUploadHistory] = useState<SpeedDataPoint[]>([]);
   const [currentSpeedMbps, setCurrentSpeedMbps] = useState<number | null>(null);

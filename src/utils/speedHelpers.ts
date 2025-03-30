@@ -1,26 +1,49 @@
-import { SpeedUnit } from './types';
+import { SpeedUnit, TestStage } from './types';
 
-// Unit Conversion
-export const convertSpeed = (speedMbps: number | null, targetUnit: SpeedUnit): number | null => {
-  if (speedMbps === null || !isFinite(speedMbps) || speedMbps < 0) return null;
-  if (targetUnit === 'MBps') {
+/**
+ * Convert speed between Mbps and MB/s
+ * 1 MB/s = 8 Mbps
+ */
+export const convertSpeed = (speedMbps: number | null, displayUnit: SpeedUnit): number | null => {
+  if (speedMbps === null) return null;
+  
+  // For MB/s, divide by 8 (because 8 bits = 1 byte)
+  if (displayUnit === 'MB/s') {
     return speedMbps / 8;
   }
+  
+  // Default is already in Mbps
   return speedMbps;
 };
 
-// Status Text Logic
-export const getStatusText = (stage: import('./types').TestStage, isTesting: boolean): string => {
-  if (stage === 'error') return "Test Failed";
-  if (stage === 'done' && !isTesting) return "Test Complete";
-  if (stage === 'idle' && !isTesting) return "Ready";
-  if (isTesting) {
-      switch (stage) {
-          case 'ping': return "Testing Ping...";
-          case 'download': return "Testing Download...";
-          case 'upload': return "Testing Upload...";
-          default: return "Initializing...";
-      }
+/**
+ * Get readable status text based on test stage
+ */
+export const getStatusText = (stage: TestStage, isTesting: boolean): string => {
+  if (!isTesting && stage === 'done') {
+    return 'Test completed';
   }
-  return "Preparing...";
+  
+  if (!isTesting && stage === 'error') {
+    return 'Test failed';
+  }
+  
+  if (!isTesting) {
+    return 'Waiting to start';
+  }
+  
+  switch (stage) {
+    case 'idle':
+      return 'Preparing test...';
+    case 'ping':
+      return 'Measuring latency...';
+    case 'download':
+      return 'Testing download speed...';
+    case 'upload':
+      return 'Testing upload speed...';
+    case 'done':
+      return 'Finalizing test...';
+    default:
+      return 'Testing connection...';
+  }
 };

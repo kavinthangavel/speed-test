@@ -1,5 +1,18 @@
-export type SpeedUnit = 'Mbps' | 'MBps';
+// Speed unit types
+export type SpeedUnit = 'Mbps' | 'MB/s'; 
+
+// Test stage types
 export type TestStage = 'idle' | 'ping' | 'download' | 'upload' | 'done' | 'error';
-export type SpeedDataPoint = { time: number; speed: number | null }; // Relative time within stage
-export type CombinedDataPoint = { time: number; downloadSpeed: number | null; uploadSpeed: number | null }; // Absolute time for graph
-export type GraphInputData = CombinedDataPoint; // Explicit type for graph component input
+
+// Speed data point structure
+export interface SpeedDataPoint {
+  time: number;
+  speed: number | null;
+}
+
+// Graph data structure
+export interface GraphInputData {
+  time: number;
+  downloadSpeed: number | null;
+  uploadSpeed: number | null;
+}
