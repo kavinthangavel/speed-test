@@ -18,12 +18,23 @@ interface MLab7Props {
   onLatency?: (data: { latency: number }) => void;
 }
 
-// We'll need this for TypeScript but avoid the global declaration
-interface NDT7Client {
-  new(config: any): {
-    startTest: (testType: 'download' | 'upload', options: any) => void;
-  }
+// Define type for progress data
+interface Ndt7ProgressData {
+  MeanClientMbps?: number;
+  // Add other potential fields if known
 }
+
+// Define type for the NDT7 client constructor
+type NDT7ClientConstructor = new (config: {
+  userAcceptedDataPolicy: boolean;
+  mlabServer?: string; // Make optional as it might be auto-detected
+  onError: (err: Error) => void;
+}) => {
+  startTest: (testType: 'download' | 'upload', options: {
+    onprogress: (data: Ndt7ProgressData) => void;
+  }) => void;
+};
+
 
 const MLab7: React.FC<MLab7Props> = ({ 
   networkInfo, 
@@ -39,7 +50,8 @@ const MLab7: React.FC<MLab7Props> = ({
   const [progress, setProgress] = useState<number>(0);
   const [results, setResults] = useState<MLab7Results | null>(null);
   const [clientReady, setClientReady] = useState<boolean>(false);
-  const [client, setClient] = useState<any>(null);
+  // Use the specific constructor type or null
+  const [client, setClient] = useState<NDT7ClientConstructor | null>(null); 
 
   useEffect(() => {
     // We use dynamic import to load client only in browser
@@ -55,7 +67,8 @@ const MLab7: React.FC<MLab7Props> = ({
           });
 
           if (isMounted && NDT7Module) {
-            setClient(NDT7Module.NDT7Client);
+            // Cast the imported client to our defined type
+            setClient(() => NDT7Module.NDT7Client as NDT7ClientConstructor); 
             setClientReady(true);
           }
         }
@@ -89,7 +102,7 @@ const MLab7: React.FC<MLab7Props> = ({
     onStart?.();
 
     try {
-      const NDT7Instance = new client({
+      const NDT7Instance = new client({ // Use the state variable 'client'
         userAcceptedDataPolicy: true,
         mlabServer: networkInfo.testServer.name,
         onError: (err: Error) => {
@@ -106,7 +119,7 @@ const MLab7: React.FC<MLab7Props> = ({
       let downloadSpeed = 0;
       
       NDT7Instance.startTest('download', {
-        onprogress: (data: any) => {
+        onprogress: (data: Ndt7ProgressData) => { // Use defined type
           if (data && data.MeanClientMbps) {
             const mbps = data.MeanClientMbps;
             downloadSpeed = mbps;
@@ -124,10 +137,15 @@ const MLab7: React.FC<MLab7Props> = ({
       
       const latencyStart = Date.now();
       try {
-        await fetch(networkInfo.testServer.urls.wss.replace('wss://', 'https://'), { 
-          method: 'HEAD',
-          mode: 'no-cors'
-        });
+        // Ensure testServer and urls exist before accessing
+        if (networkInfo.testServer.urls?.wss) {
+          await fetch(networkInfo.testServer.urls.wss.replace('wss://', 'https://'), { 
+            method: 'HEAD',
+            mode: 'no-cors' // Note: no-cors might affect accuracy but avoids CORS issues
+          });
+        } else {
+           console.warn('WSS URL not found for latency test.');
+        }
       } catch (e) {
         console.warn('Latency measurement failed:', e);
       }
@@ -145,7 +163,7 @@ const MLab7: React.FC<MLab7Props> = ({
       let uploadSpeed = 0;
       
       NDT7Instance.startTest('upload', {
-        onprogress: (data: any) => {
+        onprogress: (data: Ndt7ProgressData) => { // Use defined type
           if (data && data.MeanClientMbps) {
             const mbps = data.MeanClientMbps;
             uploadSpeed = mbps;
@@ -188,7 +206,7 @@ const MLab7: React.FC<MLab7Props> = ({
       {!isRunning && !results && (
         <div className="text-center py-4">
           <p className="text-gray-300 mb-4">
-            Test your connection speed with M-Lab's NDT7 platform
+            Test your connection speed with M-Lab&apos;s NDT7 platform 
           </p>
           <button
             className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -220,7 +238,7 @@ const MLab7: React.FC<MLab7Props> = ({
             <div className="bg-slate-700/50 p-3 rounded-lg">
               <FiClock className="mx-auto text-yellow-400 mb-1" />
               <p className="text-gray-400 text-xs">Latency</p>
-              <p className="text-white font-bold">...</p>
+              <p className="text-white font-bold">...</p> 
             </div>
             
             <div className="bg-slate-700/50 p-3 rounded-lg">

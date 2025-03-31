@@ -465,182 +465,21 @@ function getCountryCoordinates(country?: string): { lat: number, lon: number } {
   return { lat: 25.0, lon: -40.0 };
 }
 
-// Estimate distance based on regional information when precise calculation fails
-function estimateRegionalDistance(userCountry?: string, serverCountry?: string): number {
-  if (!userCountry || !serverCountry) return 1000; // Default guess
-  
-  // If same country, estimate a shorter distance
-  if (userCountry.toLowerCase() === serverCountry.toLowerCase()) {
-    return 150; // Estimate within same country
-  }
-  
-  // Regional distance estimates (very approximate)
-  const regions: Record<string, string[]> = {
-    'north_america': ['us', 'usa', 'united states', 'canada', 'mexico'],
-    'europe': ['uk', 'united kingdom', 'france', 'germany', 'italy', 'spain', 'portugal', 
-               'ireland', 'netherlands', 'belgium', 'switzerland', 'austria', 'sweden', 
-               'norway', 'denmark', 'finland', 'poland', 'greece'],
-    'asia': ['india', 'china', 'japan', 'south korea', 'korea', 'singapore', 'malaysia', 
-             'indonesia', 'thailand', 'vietnam', 'philippines', 'russia'],
-    'oceania': ['australia', 'new zealand'],
-    'south_america': ['brazil', 'argentina', 'chile', 'colombia', 'peru'],
-    'africa': ['south africa', 'egypt', 'nigeria', 'kenya'],
-    'middle_east': ['saudi arabia', 'uae', 'united arab emirates', 'israel', 'turkey']
-  };
-  
-  // Find regions for both countries
-  let userRegion = 'unknown';
-  let serverRegion = 'unknown';
-  
-  for (const [region, countries] of Object.entries(regions)) {
-    if (countries.includes(userCountry.toLowerCase())) userRegion = region;
-    if (countries.includes(serverCountry.toLowerCase())) serverRegion = region;
-  }
-  
-  // If both in same region but different countries
-  if (userRegion === serverRegion && userRegion !== 'unknown') {
-    // Regional size estimates (average distances within regions in km)
-    const regionalDistances: Record<string, number> = {
-      'north_america': 2000,
-      'europe': 1000,
-      'asia': 3000,
-      'oceania': 2000,
-      'south_america': 2500,
-      'africa': 3000,
-      'middle_east': 1500
-    };
-    return regionalDistances[userRegion] / 2; // Divide by 2 for average
-  }
-  
-  // Cross-region distance estimates (very approximate, in km)
-  const crossRegionalDistances: Record<string, Record<string, number>> = {
-    'north_america': {
-      'europe': 6000,
-      'asia': 10000,
-      'oceania': 12000,
-      'south_america': 7000,
-      'africa': 11000,
-      'middle_east': 11000
-    },
-    'europe': {
-      'asia': 6000,
-      'oceania': 15000,
-      'south_america': 9000,
-      'africa': 4000,
-      'middle_east': 3000
-    },
-    // Add more as needed
-  };
-  
-  // Check if we have an estimate for these regions
-  if (crossRegionalDistances[userRegion]?.[serverRegion]) {
-    return crossRegionalDistances[userRegion][serverRegion];
-  }
-  
-  // Check the reverse direction
-  if (crossRegionalDistances[serverRegion]?.[userRegion]) {
-    return crossRegionalDistances[serverRegion][userRegion];
-  }
-  
-  // Default fallback
-  return 8000; // Global average distance guess
-}
-
-// Vincenty's formula for more accurate earth distance
-function vincentyDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  // Convert degrees to radians
-  const φ1 = lat1 * Math.PI / 180;
-  const φ2 = lat2 * Math.PI / 180;
-  const λ1 = lon1 * Math.PI / 180;
-  const λ2 = lon2 * Math.PI / 180;
-  
-  // WGS-84 ellipsoid parameters
-  const a = 6378137.0; // semi-major axis in meters
-  const b = 6356752.314245; // semi-minor axis in meters
-  const f = 1 / 298.257223563; // flattening
-  
-  const L = λ2 - λ1; // difference in longitude
-  const tanU1 = (1 - f) * Math.tan(φ1);
-  const cosU1 = 1 / Math.sqrt(1 + tanU1 * tanU1);
-  const sinU1 = tanU1 * cosU1;
-  const tanU2 = (1 - f) * Math.tan(φ2);
-  const cosU2 = 1 / Math.sqrt(1 + tanU2 * tanU2);
-  const sinU2 = tanU2 * cosU2;
-  
-  let λ = L;
-  let sinλ, cosλ;
-  let σ, sinσ, cosσ, cos2σM;
-  let sinα, cosSqα;
-  let C;
-  
-  let λʹ;
-  let iterations = 0;
-  
-  // Iterate until convergence or max iterations
-  do {
-    sinλ = Math.sin(λ);
-    cosλ = Math.cos(λ);
-    const sinSqσ = (cosU2 * sinλ) ** 2 + (cosU1 * sinU2 - sinU1 * cosU2 * cosλ) ** 2;
-    if (sinSqσ === 0) return 0; // coincident points
-    
-    sinσ = Math.sqrt(sinSqσ);
-    cosσ = sinU1 * sinU2 + cosU1 * cosU2 * cosλ;
-    σ = Math.atan2(sinσ, cosσ);
-    sinα = cosU1 * cosU2 * sinλ / sinσ;
-    cosSqα = 1 - sinα * sinα;
-    cos2σM = cosσ - 2 * sinU1 * sinU2 / cosSqα;
-    
-    // Check for NaN
-    if (isNaN(cos2σM)) cos2σM = 0;
-    
-    C = f / 16 * cosSqα * (4 + f * (4 - 3 * cosSqα));
-    λʹ = λ;
-    λ = L + (1 - C) * f * sinα * (σ + C * sinσ * (cos2σM + C * cosσ * (-1 + 2 * cos2σM * cos2σM)));
-    
-    // Check for convergence
-    if (Math.abs(λ - λʹ) < 1e-12 || ++iterations > 200) break;
-  } while (true);
-  
-  // If no convergence, fall back to haversine
-  if (iterations >= 200) {
-    console.warn("Vincenty formula did not converge");
-    return calculateDistance(lat1, lon1, lat2, lon2);
-  }
-  
-  const uSq = cosSqα * (a*a - b*b) / (b*b);
-  const A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
-  const B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
-  const Δσ = B * sinσ * (cos2σM + 1/4 * B * (cosσ * (-1 + 2 * cos2σM * cos2σM) - 1/6 * B * cos2σM * (-3 + 4 * sinσ * sinσ) * (-3 + 4 * cos2σM * cos2σM)));
-  
-  // Calculate distance
-  const distance = b * A * (σ - Δσ) / 1000; // convert to kilometers
-  
-  return distance;
-}
-
-// The original Haversine formula as fallback
+// More accurate distance calculation using Haversine (same as simpleDistance, kept for clarity)
+// This is the primary calculation used when simpleDistance yields odd results.
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || 
-      typeof lat2 !== 'number' || typeof lon2 !== 'number' ||
-      isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
-    console.warn("Invalid coordinates for distance calculation", { lat1, lon1, lat2, lon2 });
-    return 500; // Default distance in km
+  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
+    return 0; // Return 0 or handle error appropriately
   }
   
-  try {
-    const R = 6371; // Radius of the Earth in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c; // Distance in km
-    
-    return isNaN(distance) ? 500 : distance;
-  } catch (error) {
-    console.error("Error calculating distance:", error);
-    return 500; // Default distance in km
-  }
+  const R = 6371; // Radius of the Earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180; // Convert degrees to radians
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+  const distance = R * c; // Distance in km
+  return distance;
 }

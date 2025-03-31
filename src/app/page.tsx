@@ -29,7 +29,7 @@ export default function Home() {
     startTestFlow
   } = useSpeedTest();
 
-  const { networkInfo, loading, error: networkError } = useNetworkInfo();
+  const { networkInfo, loading } = useNetworkInfo();
 
   // Auto-start on mount
   useEffect(() => {

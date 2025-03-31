@@ -1,5 +1,5 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts'; // Removed LineChart
 import { SpeedUnit, TestStage, GraphInputData } from '../../utils/types';
 import { FiActivity, FiClock, FiDownload, FiUpload } from 'react-icons/fi';
 
@@ -30,7 +30,7 @@ const SpeedGraph: React.FC<SpeedGraphProps> = ({
   downloadSpeed,
   uploadSpeed
 }) => {
-  const graphHeight = compact ? 180 : 240;
+  // Removed unused graphHeight variable
   const showResults = !isTesting || ['download', 'upload', 'done', 'error'].includes(testStage);
   
   return (

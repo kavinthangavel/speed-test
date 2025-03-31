@@ -146,7 +146,8 @@ export const useSpeedTest = () => {
 
   // --- Toggle Units ---
   const toggleUnit = useCallback(() => {
-    setDisplayUnit(prev => (prev === 'Mbps' ? 'MBps' : 'Mbps'));
+    // Corrected 'MBps' to 'MB/s' to match SpeedUnit type
+    setDisplayUnit(prev => (prev === 'Mbps' ? 'MB/s' : 'Mbps')); 
   }, []);
 
   // --- Derived State ---
