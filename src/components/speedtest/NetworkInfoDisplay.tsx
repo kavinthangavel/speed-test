@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { NetworkInfo } from '../../hooks/useNetworkInfo';
-import { FiGlobe, FiServer, FiMapPin, FiWifi, FiInfo, FiCheckCircle, FiNavigation, FiInfo as FiInfoCircle, FiAlertTriangle, FiAward, FiZap, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { FiGlobe, FiServer, FiMapPin, FiWifi, FiInfo, FiCheckCircle, FiNavigation, FiAlertTriangle, FiAward, FiZap, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
 interface NetworkInfoDisplayProps {
   networkInfo: NetworkInfo | null;
   loading: boolean;
-  compact?: boolean;
 }
 
 const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({ 
   networkInfo, 
-  loading,
-  compact = false
+  loading
 }) => {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -59,7 +57,15 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
   };
 
   // Get status indicator based on distance
-  const getDistanceStatus = (distance: number): { icon: JSX.Element; label: string; color: string } => {
+  const getDistanceStatus = (distance: number | undefined | null): { icon: React.ReactNode; label: string; color: string } => {
+    if (typeof distance !== 'number' || isNaN(distance)) {
+      return {
+        icon: <FiAlertTriangle className="mr-1" />,
+        label: "Unknown",
+        color: "text-gray-500"
+      };  
+    }
+    
     if (distance < 50) {
       return {
         icon: <FiAward className="mr-1" />,
@@ -67,29 +73,13 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
         color: "text-green-400"
       };
     } else if (distance < 500) {
-      return {
-        icon: <FiCheckCircle className="mr-1" />,
-        label: "Good",
-        color: "text-blue-400"
-      };
+      return { icon: <FiCheckCircle className="mr-1" />, label: "Good", color: "text-blue-400" };
     } else if (distance < 2000) {
-      return {
-        icon: <FiZap className="mr-1" />,
-        label: "Acceptable",
-        color: "text-yellow-400"
-      };
+      return { icon: <FiZap className="mr-1" />, label: "Acceptable", color: "text-yellow-400" };
     } else if (distance < 5000) {
-      return {
-        icon: <FiAlertTriangle className="mr-1" />,
-        label: "High Latency",
-        color: "text-amber-500"
-      };
+      return { icon: <FiAlertTriangle className="mr-1" />, label: "High Latency", color: "text-amber-500" };
     } else {
-      return {
-        icon: <FiAlertTriangle className="mr-1" />,
-        label: "Very High Latency",
-        color: "text-red-500"
-      };
+      return { icon: <FiAlertTriangle className="mr-1" />, label: "Very High Latency", color: "text-red-500" };
     }
   };
 
@@ -135,7 +125,7 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
             <span className="text-xs font-medium uppercase tracking-wider">Provider</span>
           </div>
           <div className="font-medium text-white text-sm truncate pt-0.5 group-hover:text-green-300 transition-colors">
-            {networkInfo && formatISP(networkInfo.isp)}
+            {formatISP(networkInfo.isp)}
           </div>
         </div>
         
@@ -164,14 +154,16 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
               <div className="flex items-center justify-between mt-1 text-xs">
                 <div className="flex items-center">
                   <FiNavigation className="text-orange-400 mr-1 text-xs" />
-                  <span className="text-gray-300">{formatDistance(networkInfo.testServer.distance)} km</span>
+                  <span className="text-gray-300">{formatDistance(networkInfo.testServer?.distance)} km</span>
                 </div>
-                <div className={`text-xs ${getDistanceStatus(networkInfo.testServer.distance).color} flex items-center`}>
-                  {getDistanceStatus(networkInfo.testServer.distance).icon}
-                  <span>{getDistanceStatus(networkInfo.testServer.distance).label}</span>
-                </div>
-              </div>
-            </div>
+                {networkInfo.testServer?.distance !== undefined && (
+                  <div className={`text-xs ${getDistanceStatus(networkInfo.testServer.distance).color} flex items-center`}>
+                    {getDistanceStatus(networkInfo.testServer.distance).icon}
+                    <span>{getDistanceStatus(networkInfo.testServer.distance).label}</span>
+                  </div>
+                )}
+              </div> {/* This closes the inner flex items-center justify-between */}
+            </div> {/* This closes flex flex-col */}
           </div>
         )}
       </div>
@@ -182,17 +174,19 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
           <h4 className="text-gray-400 font-medium mb-2">Server Details</h4>
           <div className="bg-slate-900/50 p-3 rounded-lg text-gray-300 font-mono shadow-inner">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div><span className="text-gray-500">Name:</span> {networkInfo.testServer.name}</div>
-              <div><span className="text-gray-500">Location:</span> {networkInfo.testServer.location}</div>
+              <div><span className="text-gray-500">Name:</span> {networkInfo.testServer!.name}</div>
+              <div><span className="text-gray-500">Location:</span> {networkInfo.testServer!.location}</div>
               <div className="flex items-center">
                 <span className="text-gray-500">Distance:</span> 
-                <span className="ml-1">{formatDistance(networkInfo.testServer.distance)} km</span>
-                <span className={`ml-2 ${getDistanceStatus(networkInfo.testServer.distance).color} flex items-center`}>
-                  {getDistanceStatus(networkInfo.testServer.distance).icon}
-                  {getDistanceStatus(networkInfo.testServer.distance).label}
-                </span>
+                <span className="ml-1">{formatDistance(networkInfo.testServer!.distance)} km</span>
+                {networkInfo.testServer!.distance !== undefined && (
+                  <span className={`ml-2 ${getDistanceStatus(networkInfo.testServer!.distance).color} flex items-center`}>
+                    {getDistanceStatus(networkInfo.testServer!.distance).icon}
+                    {getDistanceStatus(networkInfo.testServer!.distance).label}
+                  </span>
+                )}
               </div>
-              <div><span className="text-gray-500">Est. Latency:</span> ~{Math.round(networkInfo.testServer.distance / 15)} ms</div>
+              <div><span className="text-gray-500">Est. Latency:</span> {typeof networkInfo.testServer!.distance === 'number' ? `~${Math.round(networkInfo.testServer!.distance / 15)} ms` : 'N/A'}</div>
               <div className="sm:col-span-2"><span className="text-gray-500">Provider:</span> {formatISP(networkInfo.isp)}</div>
             </div>
           </div>
