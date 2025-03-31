@@ -13,7 +13,6 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [wasRateLimited, setWasRateLimited] = useState(false);
   const [connectionStage, setConnectionStage] = useState<'connecting' | 'checking' | 'error' | 'connected'>('connecting');
   const [stageTransition, setStageTransition] = useState(false);
   
@@ -46,11 +45,9 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
           if (networkInfo.testServer) {
             // If we have server info, we're connected
             setConnectionStage('connected');
-            setWasRateLimited(false);
           } else {
             // No server info means we're rate limited
             setConnectionStage('error');
-            setWasRateLimited(true);
           }
           // End the transition effect
           setStageTransition(false);
@@ -67,7 +64,6 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
         setStageTransition(true);
         setTimeout(() => {
           setConnectionStage('connected');
-          setWasRateLimited(false);
           setStageTransition(false);
         }, 300);
       } else if (!networkInfo?.testServer && connectionStage !== 'connecting' && 
@@ -76,7 +72,6 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
         setStageTransition(true);
         setTimeout(() => {
           setConnectionStage('error');
-          setWasRateLimited(true);
           setStageTransition(false);
         }, 300);
       }
@@ -155,17 +150,6 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
     }
   };
 
-  // Define a connection progress indicator
-  const getConnectionProgress = () => {
-    switch(connectionStage) {
-      case 'connecting': return 25;
-      case 'checking': return 50;
-      case 'error': return 100;
-      case 'connected': return 100;
-      default: return 0;
-    }
-  };
-  
   // Connection stage display text
   const getStageName = () => {
     switch(connectionStage) {
