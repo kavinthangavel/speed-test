@@ -1,5 +1,22 @@
 import { useState, useEffect } from 'react';
 
+// Define a proper interface for geoData to avoid 'any' type and include all possible properties
+interface GeoData {
+  ip?: string;
+  isp?: string;
+  org?: string;
+  city?: string;
+  regionName?: string;
+  region?: string;
+  region_name?: string; // Property from ipapi.co response
+  country?: string;
+  lat: string | number;
+  lon: string | number;
+  latitude?: string | number; // Property from ipapi.co response
+  longitude?: string | number; // Property from ipapi.co response
+  loc?: string;
+}
+
 export interface NetworkInfo {
   ip: string;
   isp: string;
@@ -41,7 +58,7 @@ export const useNetworkInfo = (selectedServer?: string) => {
         const ipAddress = ipData.ip;
 
         // Try multiple IP information services
-        let geoData;
+        let geoData: GeoData;
         
         // First try ipinfo.io (fallback)
         try {
@@ -108,7 +125,7 @@ export const useNetworkInfo = (selectedServer?: string) => {
         setLoading(false);
         
         // Now fetch the server info separately
-        fetchTestServerInfo(ipAddress, geoData);
+        fetchTestServerInfo(geoData);
         
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error occurred');
@@ -117,7 +134,8 @@ export const useNetworkInfo = (selectedServer?: string) => {
       }
     };
     
-    const fetchTestServerInfo = async (ipAddress: string, geoData: any) => {
+    // Modified to remove unused ipAddress parameter
+    const fetchTestServerInfo = async (geoData: GeoData) => {
       if (selectedServer) return; // Skip if a server is manually selected
       
       try {
