@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NetworkInfo } from '../../hooks/useNetworkInfo';
 import { FiGlobe, FiServer, FiMapPin, FiWifi, FiInfo, FiCheckCircle, FiNavigation, FiAlertTriangle, FiAward, FiZap, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 
@@ -12,8 +12,17 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
   loading
 }) => {
   const [showDetails, setShowDetails] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  
+  // Track when network info becomes available
+  useEffect(() => {
+    if (networkInfo && !dataLoaded) {
+      setDataLoaded(true);
+    }
+  }, [networkInfo, dataLoaded]);
 
-  if (loading) {
+  // Show skeleton loader while initial loading
+  if (loading && !dataLoaded) {
     return (
       <div className="bg-gradient-to-r from-slate-900/60 to-slate-800/60 p-4 rounded-lg shadow-lg animate-pulse backdrop-blur-sm border border-slate-700/40">
         <div className="flex items-center space-x-2 border-b border-slate-700/50 pb-2 mb-3">
@@ -30,13 +39,14 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
     );
   }
   
-  if (!networkInfo) {
-    return (
-      <div className="bg-gradient-to-r from-slate-900/60 to-slate-800/60 p-4 rounded-lg shadow-lg backdrop-blur-sm border border-slate-700/40">
-        <p className="text-gray-400 text-center text-sm py-3">Loading connection details...</p>
-      </div>
-    );
-  }
+  // Always display info even if incomplete
+  const displayInfo = networkInfo || {
+    ip: "Loading...",
+    isp: "Loading...",
+    city: "Loading...",
+    country: "Loading...",
+    testServer: null
+  };
 
   // Format distance to ensure it always displays properly
   const formatDistance = (distance: number | undefined) => {
@@ -115,7 +125,12 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
             <FiGlobe className="text-blue-400 mr-2 text-sm" />
             <span className="text-xs font-medium uppercase tracking-wider">IP Address</span>
           </div>
-          <div className="font-medium text-white text-sm truncate pt-0.5 group-hover:text-blue-300 transition-colors">{networkInfo.ip}</div>
+          <div className="font-medium text-white text-sm truncate pt-0.5 group-hover:text-blue-300 transition-colors">
+            {loading && !dataLoaded ? 
+              <div className="h-4 bg-slate-700/70 rounded w-24 animate-pulse"></div> : 
+              displayInfo.ip
+            }
+          </div>
         </div>
         
         {/* ISP */}
@@ -125,7 +140,10 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
             <span className="text-xs font-medium uppercase tracking-wider">Provider</span>
           </div>
           <div className="font-medium text-white text-sm truncate pt-0.5 group-hover:text-green-300 transition-colors">
-            {formatISP(networkInfo.isp)}
+            {loading && !dataLoaded ? 
+              <div className="h-4 bg-slate-700/70 rounded w-32 animate-pulse"></div> : 
+              formatISP(displayInfo.isp)
+            }
           </div>
         </div>
         
@@ -136,60 +154,110 @@ const NetworkInfoDisplay: React.FC<NetworkInfoDisplayProps> = ({
             <span className="text-xs font-medium uppercase tracking-wider">Location</span>
           </div>
           <div className="font-medium text-white text-sm truncate pt-0.5 group-hover:text-red-300 transition-colors">
-            {networkInfo.city}, {networkInfo.country}
+            {loading && !dataLoaded ? 
+              <div className="h-4 bg-slate-700/70 rounded w-28 animate-pulse"></div> : 
+              `${displayInfo.city}, ${displayInfo.country}`
+            }
           </div>
         </div>
         
-        {/* Test Server (Combined) */}
-        {networkInfo.testServer && (
-          <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-lg px-3 py-3 flex flex-col justify-between group hover:from-slate-800/90 hover:to-slate-900/90 transition-all duration-300 border border-slate-700/30 hover:border-purple-900/30 shadow-sm">
-            <div className="flex items-center text-gray-400 mb-1.5 pb-1 border-b border-slate-700/30">
-              <FiServer className="text-purple-400 mr-2 text-sm" />
-              <span className="text-xs font-medium uppercase tracking-wider">Test Server</span>
-            </div>
-            <div className="flex flex-col">
-              <div className="font-medium text-white text-sm truncate pt-0.5 group-hover:text-purple-300 transition-colors">
-                {networkInfo.testServer.location}
-              </div>
-              <div className="flex items-center justify-between mt-1 text-xs">
-                <div className="flex items-center">
-                  <FiNavigation className="text-orange-400 mr-1 text-xs" />
-                  <span className="text-gray-300">{formatDistance(networkInfo.testServer?.distance)} km</span>
-                </div>
-                {networkInfo.testServer?.distance !== undefined && (
-                  <div className={`text-xs ${getDistanceStatus(networkInfo.testServer.distance).color} flex items-center`}>
-                    {getDistanceStatus(networkInfo.testServer.distance).icon}
-                    <span>{getDistanceStatus(networkInfo.testServer.distance).label}</span>
-                  </div>
-                )}
-              </div> {/* This closes the inner flex items-center justify-between */}
-            </div> {/* This closes flex flex-col */}
+        {/* Test Server (Combined) - Always shown, with loading state if needed */}
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-lg px-3 py-3 flex flex-col justify-between group hover:from-slate-800/90 hover:to-slate-900/90 transition-all duration-300 border border-slate-700/30 hover:border-purple-900/30 shadow-sm">
+          <div className="flex items-center text-gray-400 mb-1.5 pb-1 border-b border-slate-700/30">
+            <FiServer className="text-purple-400 mr-2 text-sm" />
+            <span className="text-xs font-medium uppercase tracking-wider">Test Server</span>
           </div>
-        )}
+          <div className="flex flex-col">
+            {loading || !displayInfo.testServer ? (
+              <>
+                <div className="font-medium text-white text-sm truncate pt-0.5">
+                  <div className="flex items-center">
+                    <span className="w-3 h-3 bg-slate-700 rounded-full mr-2 animate-pulse"></span>
+                    <span>Connecting...</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-1 text-xs">
+                  <div className="flex items-center">
+                    <FiNavigation className="text-orange-400 mr-1 text-xs" />
+                    <span className="text-gray-400">Calculating...</span>
+                  </div>
+                  <div className="text-xs text-amber-400 flex items-center">
+                    <FiAlertTriangle className="mr-1" />
+                    <span>API Limited</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="font-medium text-white text-sm truncate pt-0.5 group-hover:text-purple-300 transition-colors">
+                  {displayInfo.testServer?.location || "Unknown Location"}
+                </div>
+                <div className="flex items-center justify-between mt-1 text-xs">
+                  <div className="flex items-center">
+                    <FiNavigation className="text-orange-400 mr-1 text-xs" />
+                    <span className="text-gray-300">{formatDistance(displayInfo.testServer?.distance)} km</span>
+                  </div>
+                  {displayInfo.testServer?.distance !== undefined ? (
+                    <div className={`text-xs ${getDistanceStatus(displayInfo.testServer.distance).color} flex items-center`}>
+                      {getDistanceStatus(displayInfo.testServer.distance).icon}
+                      <span>{getDistanceStatus(displayInfo.testServer.distance).label}</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400 flex items-center">
+                      <FiAlertTriangle className="mr-1" />
+                      <span>Unknown</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
       
-      {/* Server details panel */}
-      {showDetails && networkInfo.testServer && (
+      {/* Server details panel - Show loading state if needed */}
+      {showDetails && (
         <div className="mt-4 pt-3 text-xs border-t border-slate-700/30 animate-fadeIn">
           <h4 className="text-gray-400 font-medium mb-2">Server Details</h4>
-          <div className="bg-slate-900/50 p-3 rounded-lg text-gray-300 font-mono shadow-inner">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div><span className="text-gray-500">Name:</span> {networkInfo.testServer!.name}</div>
-              <div><span className="text-gray-500">Location:</span> {networkInfo.testServer!.location}</div>
-              <div className="flex items-center">
-                <span className="text-gray-500">Distance:</span> 
-                <span className="ml-1">{formatDistance(networkInfo.testServer!.distance)} km</span>
-                {networkInfo.testServer!.distance !== undefined && (
-                  <span className={`ml-2 ${getDistanceStatus(networkInfo.testServer!.distance).color} flex items-center`}>
-                    {getDistanceStatus(networkInfo.testServer!.distance).icon}
-                    {getDistanceStatus(networkInfo.testServer!.distance).label}
-                  </span>
-                )}
+          {displayInfo.testServer ? (
+            <div className="bg-slate-900/50 p-3 rounded-lg text-gray-300 font-mono shadow-inner">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div><span className="text-gray-500">Name:</span> {displayInfo.testServer?.name || "Not connected"}</div>
+                <div><span className="text-gray-500">Location:</span> {displayInfo.testServer?.location || "Unknown"}</div>
+                <div className="flex items-center">
+                  <span className="text-gray-500">Distance:</span> 
+                  <span className="ml-1">{formatDistance(displayInfo.testServer?.distance)} km</span>
+                  {displayInfo.testServer?.distance !== undefined && (
+                    <span className={`ml-2 ${getDistanceStatus(displayInfo.testServer.distance).color} flex items-center`}>
+                      {getDistanceStatus(displayInfo.testServer.distance).icon}
+                      {getDistanceStatus(displayInfo.testServer.distance).label}
+                    </span>
+                  )}
+                </div>
+                <div><span className="text-gray-500">Est. Latency:</span> {typeof displayInfo.testServer?.distance === 'number' ? `~${Math.round(displayInfo.testServer.distance / 15)} ms` : 'N/A'}</div>
+                <div className="sm:col-span-2"><span className="text-gray-500">Provider:</span> {formatISP(displayInfo.isp)}</div>
               </div>
-              <div><span className="text-gray-500">Est. Latency:</span> {typeof networkInfo.testServer!.distance === 'number' ? `~${Math.round(networkInfo.testServer!.distance / 15)} ms` : 'N/A'}</div>
-              <div className="sm:col-span-2"><span className="text-gray-500">Provider:</span> {formatISP(networkInfo.isp)}</div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-slate-900/50 p-3 rounded-lg shadow-inner">
+              <div className="animate-pulse flex space-x-4">
+                <div className="flex-1 space-y-4 py-1">
+                  <div className="h-3 bg-slate-700/70 rounded w-3/4"></div>
+                  <div className="space-y-2">
+                    <div className="h-3 bg-slate-700/70 rounded"></div>
+                    <div className="h-3 bg-slate-700/70 rounded w-5/6"></div>
+                  </div>
+                  <div className="h-3 bg-slate-700/70 rounded w-1/2"></div>
+                </div>
+              </div>
+              <div className="mt-2 text-amber-300 flex items-center">
+                <FiAlertTriangle className="text-amber-400 mr-2" />
+                <span>Server information unavailable - API rate limited (429 error)</span>
+              </div>
+              <p className="mt-2 text-gray-300">The M-Lab API is rate limiting requests. Please try again in a few minutes.</p>
+              <p className="mt-1 text-gray-400">Rate limits typically reset after 10-15 minutes.</p>
+            </div>
+          )}
           <div className="mt-2 text-gray-400 text-center text-xs">
             <span className="flex items-center justify-center">
               <FiCheckCircle className="text-green-500 mr-1" />

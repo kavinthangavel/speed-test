@@ -26,7 +26,8 @@ export const useNetworkInfo = (selectedServer?: string) => {
       return;
     }
     
-    const fetchNetworkInfo = async () => {
+    // Split the network info fetching to improve user experience
+    const fetchIPAndLocation = async () => {
       try {
         setLoading(true);
         setError(null);
@@ -92,102 +93,7 @@ export const useNetworkInfo = (selectedServer?: string) => {
           return isp.replace(/^AS\d+\s+/i, '').trim();
         };
 
-        // Fetch nearest M-Lab server
-        let testServer = null;
-        if (!selectedServer) {
-          try {
-            const response = await fetch('https://locate.measurementlab.net/v2/nearest/ndt/ndt7');
-            if (response.ok) {
-              const serverData = await response.json();
-              
-              if (serverData.results && serverData.results.length > 0) {
-                const server = serverData.results[0];
-                
-                // Extract server hostname and try to parse location info from it
-                const serverHostname = server.machine || '';
-                console.log("Server hostname:", serverHostname);
-                
-                // Parse hostname for location hints (M-Lab servers often have location codes in their names)
-                // Format is often like: mlab1-xyz01.measurement-lab.org where xyz is a city/airport code
-                let locationCode = '';
-                const hostnameMatch = serverHostname.match(/mlab\d+-([a-z]{3}\d+)/i);
-                if (hostnameMatch && hostnameMatch[1]) {
-                  locationCode = hostnameMatch[1].substring(0, 3).toLowerCase();
-                  console.log("Extracted location code from hostname:", locationCode);
-                }
-                
-                // Ensure coordinates are valid numbers
-                const userLat = typeof geoData.lat === 'string' ? parseFloat(geoData.lat) : geoData.lat;
-                const userLon = typeof geoData.lon === 'string' ? parseFloat(geoData.lon) : geoData.lon;
-                
-                // SIMPLIFIED APPROACH: Use M-Lab location codes directly
-                let serverLat, serverLon;
-                let coordinateSource = "unknown";
-                
-                // Direct mapping of M-Lab location codes to coordinates
-                if (locationCode && mlabLocationCodes[locationCode]) {
-                  [serverLat, serverLon] = mlabLocationCodes[locationCode];
-                  coordinateSource = "m-lab code";
-                }
-                // If server location info available from the API
-                else if (server.location?.city && server.location?.country) {
-                  // Try exact name match first
-                  const exactLocation = `${server.location.city}, ${server.location.country}`.toLowerCase();
-                  if (directLocationMapping[exactLocation]) {
-                    [serverLat, serverLon] = directLocationMapping[exactLocation];
-                    coordinateSource = "direct mapping";
-                  } 
-                  // Try city-based coordinates
-                  else {
-                    const cityCoords = getCityCoordinates(server.location.city, server.location.country);
-                    if (cityCoords.found) {
-                      serverLat = cityCoords.lat;
-                      serverLon = cityCoords.lon;
-                      coordinateSource = "city database";
-                    } else {
-                      // Fallback to country coordinates
-                      const countryCoords = getCountryCoordinates(server.location.country);
-                      serverLat = countryCoords.lat;
-                      serverLon = countryCoords.lon;
-                      coordinateSource = "country database";
-                    }
-                  }
-                } else {
-                  // Last resort fallback for safety
-                  serverLat = 25;
-                  serverLon = -40;
-                  coordinateSource = "default";
-                }
-                
-                console.log("User coordinates:", userLat, userLon);
-                console.log("Server coordinates:", serverLat, serverLon, `(source: ${coordinateSource})`);
-                
-                // Simple distance calculation for speed and reliability
-                let distance = simpleDistance(userLat, userLon, serverLat, serverLon);
-                console.log("Simple distance calculation:", distance, "km");
-                
-                // If distance is unreasonably large or small, try other calculation
-                if (isNaN(distance) || distance > 20000 || distance < 1) {
-                  distance = calculateDistance(userLat, userLon, serverLat, serverLon);
-                  console.log("Fallback distance calculation:", distance, "km");
-                }
-                
-                console.log("Final calculated distance:", distance, "km");
-                
-                testServer = {
-                  name: server.machine || 'Unknown',
-                  location: `${server.location?.city || 'Unknown'}, ${server.location?.country || 'Unknown'}`,
-                  distance: Math.round(distance),
-                  urls: server.urls || {},
-                };
-              }
-            }
-          } catch (serverError) {
-            console.warn('Could not fetch M-Lab servers:', serverError);
-            // Continue without test server info
-          }
-        }
-
+        // Set basic network info immediately
         setNetworkInfo({
           ip: ipAddress,
           isp: formatISP(geoData.isp || geoData.org || 'Unknown'),
@@ -195,20 +101,164 @@ export const useNetworkInfo = (selectedServer?: string) => {
           region: geoData.regionName || geoData.region || 'Unknown',
           country: geoData.country || 'Unknown',
           loc: geoData.loc || `${geoData.lat},${geoData.lon}`,
-          testServer,
+          testServer: null, // Will be populated later
         });
+        
+        // Reduce loading state once we have basic info
+        setLoading(false);
+        
+        // Now fetch the server info separately
+        fetchTestServerInfo(ipAddress, geoData);
+        
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error occurred');
         console.error('Error fetching network info:', err);
-      } finally {
         setLoading(false);
       }
     };
+    
+    const fetchTestServerInfo = async (ipAddress: string, geoData: any) => {
+      if (selectedServer) return; // Skip if a server is manually selected
+      
+      try {
+        // Fetch nearest M-Lab server
+        const response = await fetchWithRetry('https://locate.measurementlab.net/v2/nearest/ndt/ndt7');
+        if (response.ok) {
+          const serverData = await response.json();
+          
+          if (serverData.results && serverData.results.length > 0) {
+            const server = serverData.results[0];
+            
+            // Extract server hostname and try to parse location info from it
+            const serverHostname = server.machine || '';
+            console.log("Server hostname:", serverHostname);
+            
+            // Parse hostname for location hints
+            let locationCode = '';
+            const hostnameMatch = serverHostname.match(/mlab\d+-([a-z]{3}\d+)/i);
+            if (hostnameMatch && hostnameMatch[1]) {
+              locationCode = hostnameMatch[1].substring(0, 3).toLowerCase();
+              console.log("Extracted location code from hostname:", locationCode);
+            }
+            
+            // User coordinates
+            const userLat = typeof geoData.lat === 'string' ? parseFloat(geoData.lat) : geoData.lat;
+            const userLon = typeof geoData.lon === 'string' ? parseFloat(geoData.lon) : geoData.lon;
+            
+            // Get server coordinates
+            let serverLat, serverLon;
+            let coordinateSource = "unknown";
+            
+            // Try location code mapping first
+            if (locationCode && mlabLocationCodes[locationCode]) {
+              [serverLat, serverLon] = mlabLocationCodes[locationCode];
+              coordinateSource = "m-lab code";
+            }
+            // Try exact location match next
+            else if (server.location?.city && server.location?.country) {
+              const exactLocation = `${server.location.city}, ${server.location.country}`.toLowerCase();
+              if (directLocationMapping[exactLocation]) {
+                [serverLat, serverLon] = directLocationMapping[exactLocation];
+                coordinateSource = "direct mapping";
+              } 
+              // Try city database
+              else {
+                const cityCoords = getCityCoordinates(server.location.city, server.location.country);
+                if (cityCoords.found) {
+                  serverLat = cityCoords.lat;
+                  serverLon = cityCoords.lon;
+                  coordinateSource = "city database";
+                } else {
+                  // Fallback to country
+                  const countryCoords = getCountryCoordinates(server.location.country);
+                  serverLat = countryCoords.lat;
+                  serverLon = countryCoords.lon;
+                  coordinateSource = "country database";
+                }
+              }
+            } else {
+              // Default fallback
+              serverLat = 25;
+              serverLon = -40;
+              coordinateSource = "default";
+            }
+            
+            console.log("User coordinates:", userLat, userLon);
+            console.log("Server coordinates:", serverLat, serverLon, `(source: ${coordinateSource})`);
+            
+            // Calculate distance
+            let distance = simpleDistance(userLat, userLon, serverLat, serverLon);
+            console.log("Simple distance calculation:", distance, "km");
+            
+            // Alternative calculation if needed
+            if (isNaN(distance) || distance > 20000 || distance < 1) {
+              distance = calculateDistance(userLat, userLon, serverLat, serverLon);
+              console.log("Fallback distance calculation:", distance, "km");
+            }
+            
+            console.log("Final calculated distance:", distance, "km");
+            
+            // Create test server object
+            const testServer = {
+              name: server.machine || 'Unknown',
+              location: `${server.location?.city || 'Unknown'}, ${server.location?.country || 'Unknown'}`,
+              distance: Math.round(distance),
+              urls: server.urls || {},
+            };
+            
+            // Update network info with test server data
+            setNetworkInfo(prev => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                testServer
+              };
+            });
+          }
+        }
+      } catch (serverError) {
+        console.warn('Could not fetch M-Lab servers:', serverError);
+        // Continue without test server info - the UI will show a message
+      }
+    };
 
-    fetchNetworkInfo();
+    fetchIPAndLocation();
   }, [selectedServer]);
 
   return { networkInfo, loading, error };
+};
+
+// Add these helper functions:
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const fetchWithRetry = async (url: string, options: RequestInit = {}, maxRetries = 3) => {
+  let retries = 0;
+  let backoffTime = 2000; // Start with 2 second delay
+  
+  while (retries < maxRetries) {
+    try {
+      const response = await fetch(url, options);
+      
+      if (response.status === 429) {
+        // Rate limited - backoff and retry
+        console.log(`Rate limited (429). Retrying in ${backoffTime/1000} seconds...`);
+        await delay(backoffTime);
+        backoffTime *= 2; // Exponential backoff
+        retries++;
+      } else {
+        return response; // Return successful response
+      }
+    } catch (error) {
+      // For network errors, also retry
+      console.error("Network error during fetch:", error);
+      await delay(backoffTime);
+      backoffTime *= 2;
+      retries++;
+    }
+  }
+  
+  // If we've exhausted retries, throw an error
+  throw new Error("API is rate limited. Please try again later.");
 };
 
 // Direct mapping of M-Lab location codes to exact coordinates
