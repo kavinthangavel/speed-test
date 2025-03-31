@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   description: "Analyze your internet connection's latency, download, and upload speed with this modern performance tool.",
   icons: {
     icon: '/favicon.ico',
-  },
+},
 };
 
 export default function RootLayout({
