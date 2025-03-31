@@ -36,6 +36,7 @@ module.exports = {
         'fadeIn': 'fadeIn 0.5s ease-in-out',
         'gradient-shift': 'gradient-shift 5s ease infinite',
         'pulse': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        shimmer: 'shimmer 2s infinite',
       },
       keyframes: {
         fadeIn: {
@@ -46,6 +47,9 @@ module.exports = {
           '0%': { backgroundPosition: '0% 50%' },
           '50%': { backgroundPosition: '100% 50%' },
           '100%': { backgroundPosition: '0% 50%' },
+        },
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
         },
       },
     },

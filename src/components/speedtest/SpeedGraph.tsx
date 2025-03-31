@@ -34,66 +34,66 @@ const SpeedGraph: React.FC<SpeedGraphProps> = ({
   const showResults = !isTesting || ['download', 'upload', 'done', 'error'].includes(testStage);
   
   return (
-    <div className="bg-slate-800/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden p-4 border border-slate-700/40">
-      <div className="flex justify-between items-center mb-3">
+    <div className="bg-slate-800/60 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden p-2 sm:p-4 border border-slate-700/40">
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
         <div className="flex items-center">
           <FiActivity className="text-blue-400 mr-2" />
-          <h3 className="text-sm font-semibold text-blue-100">Speed Test Results</h3>
+          <h3 className="text-xs sm:text-sm font-semibold text-blue-100">Speed Test Results</h3>
         </div>
         
         {isTesting && currentSpeedMbps !== null && (
-          <div className="flex items-center bg-slate-900/60 px-3 py-1 rounded-full">
-            <span className="text-xs font-medium text-gray-400 mr-1">Current:</span>
-            <span className="text-sm font-bold text-white">{currentSpeedMbps.toFixed(2)}</span>
-            <span className="text-xs text-gray-400 ml-1">{displayUnit}</span>
+          <div className="flex items-center bg-slate-900/60 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full">
+            <span className="text-[10px] sm:text-xs font-medium text-gray-400 mr-1">Current:</span>
+            <span className="text-xs sm:text-sm font-bold text-white">{currentSpeedMbps.toFixed(2)}</span>
+            <span className="text-[10px] sm:text-xs text-gray-400 ml-1">{displayUnit}</span>
           </div>
         )}
         
         {!error && (
-          <div className="text-xs font-medium text-blue-300/80 bg-slate-900/40 px-3 py-1 rounded-full">
+          <div className="text-[10px] sm:text-xs font-medium text-blue-300/80 bg-slate-900/40 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full">
             {statusText}
           </div>
         )}
       </div>
       
       {showResults && (
-        <div className="grid grid-cols-3 gap-3 mb-4 bg-slate-900/30 p-3 rounded-lg">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mb-2 sm:mb-3 bg-slate-900/30 p-1.5 sm:p-3 rounded-lg">
           <div className="flex items-center justify-center flex-col">
-            <div className="flex items-center mb-1">
+            <div className="flex items-center mb-0.5">
               <FiClock className="text-yellow-400 mr-1.5" />
-              <span className="text-xs font-medium text-gray-300">Ping</span>
+              <span className="text-[10px] sm:text-xs font-medium text-gray-300">Ping</span>
             </div>
             <div className="flex items-baseline">
-              <span className="font-bold text-xl text-white">{ping !== null ? ping : '—'}</span>
-              <span className="text-gray-400 ml-1 text-xs">ms</span>
+              <span className="font-bold text-base sm:text-xl text-white">{ping !== null ? ping : '—'}</span>
+              <span className="text-gray-400 ml-1 text-[10px] sm:text-xs">ms</span>
             </div>
           </div>
           
           <div className="flex items-center justify-center flex-col">
-            <div className="flex items-center mb-1">
+            <div className="flex items-center mb-0.5">
               <FiDownload className="text-green-400 mr-1.5" />
-              <span className="text-xs font-medium text-gray-300">Download</span>
+              <span className="text-[10px] sm:text-xs font-medium text-gray-300">Download</span>
             </div>
             <div className="flex items-baseline">
-              <span className="font-bold text-xl text-white">{downloadSpeed !== null ? downloadSpeed.toFixed(2) : '—'}</span>
-              <span className="text-gray-400 ml-1 text-xs">{displayUnit}</span>
+              <span className="font-bold text-base sm:text-xl text-white">{downloadSpeed !== null ? downloadSpeed.toFixed(2) : '—'}</span>
+              <span className="text-gray-400 ml-1 text-[10px] sm:text-xs">{displayUnit}</span>
             </div>
           </div>
           
           <div className="flex items-center justify-center flex-col">
-            <div className="flex items-center mb-1">
+            <div className="flex items-center mb-0.5">
               <FiUpload className="text-purple-400 mr-1.5" />
-              <span className="text-xs font-medium text-gray-300">Upload</span>
+              <span className="text-[10px] sm:text-xs font-medium text-gray-300">Upload</span>
             </div>
             <div className="flex items-baseline">
-              <span className="font-bold text-xl text-white">{uploadSpeed !== null ? uploadSpeed.toFixed(2) : '—'}</span>
-              <span className="text-gray-400 ml-1 text-xs">{displayUnit}</span>
+              <span className="font-bold text-base sm:text-xl text-white">{uploadSpeed !== null ? uploadSpeed.toFixed(2) : '—'}</span>
+              <span className="text-gray-400 ml-1 text-[10px] sm:text-xs">{displayUnit}</span>
             </div>
           </div>
         </div>
       )}
       
-      <div className={`w-full ${compact ? 'h-[160px]' : 'h-[220px]'} mt-1`}>
+      <div className={`w-full ${compact ? 'h-[140px]' : 'h-[180px] sm:h-[200px]'} mt-1`}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={graphData}
@@ -112,7 +112,7 @@ const SpeedGraph: React.FC<SpeedGraphProps> = ({
             <CartesianGrid strokeDasharray="3 3" stroke="#404040" strokeOpacity={0.2} />
             <XAxis 
               dataKey="time" 
-              tick={{ fontSize: 10, fill: '#A0AEC0' }}
+              tick={{ fontSize: 8, fill: '#A0AEC0' }}
               label={{ value: 'Time (seconds)', position: 'insideBottomRight', offset: -5, fontSize: 10, fill: '#718096' }}
               axisLine={{ stroke: '#4A5568', strokeWidth: 1 }}
               tickLine={{ stroke: '#4A5568' }}

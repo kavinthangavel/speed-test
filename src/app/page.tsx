@@ -12,7 +12,7 @@ import NetworkInfoDisplay from '../components/speedtest/NetworkInfoDisplay';
 import { useSpeedTest } from '../hooks/useSpeedTest';
 import { useNetworkInfo } from '../hooks/useNetworkInfo';
 
-export default function Home() {
+const Page = () => {
   const {
     ping,
     isTesting,
@@ -31,49 +31,43 @@ export default function Home() {
 
   const { networkInfo, loading } = useNetworkInfo();
 
-  // Auto-start on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
     const controller = new AbortController();
     startTestFlow(controller);
-
-    // Cleanup function
     return () => {
       console.log("Component unmounting, aborting any active test...");
       controller.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [startTestFlow]);
 
   return (
-    <main className="flex min-h-screen w-full flex-col items-center p-3 sm:p-4 bg-gradient-to-br from-gray-900 via-slate-900 to-black text-gray-200 font-sans overflow-hidden">
+    <div className="flex min-h-[100dvh] w-full flex-col items-center p-2 sm:p-3 bg-gradient-to-br from-gray-900 via-slate-900 to-black text-gray-200 font-sans">
       {/* Settings Toggle */}
-      <div className="w-full max-w-5xl flex flex-wrap justify-end items-center mb-1">
+      <div className="w-full max-w-5xl flex flex-wrap justify-end items-center mb-2 sm:mb-1">
         <UnitToggle displayUnit={displayUnit} toggleUnit={toggleUnit} />
       </div>
 
       {/* Content Container */}
-      <div className="flex flex-col items-center justify-center w-full flex-grow max-h-[calc(100vh-6rem)]">
+      <div className="flex flex-col items-center w-full flex-grow">
         <div className="w-full max-w-5xl mx-auto text-center flex flex-col items-center">
           {/* Heading */}
-          <h1 className="text-2xl sm:text-3xl font-bold mb-1 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-500">
+          <h1 className="text-xl sm:text-3xl font-bold mb-0.5 sm:mb-1 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-500">
             Speed Test
           </h1>
-          <p className="text-xs text-indigo-300/90 italic mb-2 px-4">
-            Focus. Speed. I am... checking your internet! Ready? Ka-chow!
+          <p className="text-[10px] sm:text-xs text-indigo-300/90 italic mb-1.5 px-4">
+            Focus. Speed. Internet checking in progress!
           </p>
 
           {/* Main Content Area */}
-          <div className="w-full flex flex-col h-full space-y-3">
-            {/* Connection Information - Enhanced size */}
-            <div className="w-full animate-fadeIn">
+          <div className="w-full flex flex-col space-y-2 sm:space-y-3">
+            {/* Desktop Network Info */}
+            <div className="hidden sm:block w-full">
               <NetworkInfoDisplay networkInfo={networkInfo} loading={loading} />
             </div>
 
-            {/* Speed Test Components */}
-            <div className="w-full space-y-3 animate-fadeIn flex-grow">
-              {/* Integrated Graph & Results Area */}
+            {/* Speed Graph and Controls */}
+            <div className="w-full space-y-2 sm:space-y-3">
               <SpeedGraph
                 graphData={graphData}
                 displayUnit={displayUnit}
@@ -88,16 +82,29 @@ export default function Home() {
                 uploadSpeed={displayUploadSpeed}
               />
 
-              {/* Error Message Area */}
+              {/* Error Display */}
               {error && <ErrorDisplay error={error} />}
 
-              {/* Centered Test Button */}
-              <div className="flex justify-center">
+              {/* Desktop Test Button */}
+              <div className="hidden sm:flex justify-center">
                 <TestButton isTesting={isTesting} onRestart={handleRestartTest} />
               </div>
 
-              {/* Summary Message Area - Assessment only */}
-              <div className="flex justify-center w-full">
+              {/* Mobile Layout */}
+              <div className="flex sm:hidden flex-col space-y-2">
+                {/* Mobile Test Button */}
+                <div className="flex justify-center">
+                  <TestButton isTesting={isTesting} onRestart={handleRestartTest} />
+                </div>
+
+                {/* Mobile Network Info */}
+                <div className="w-full">
+                  <NetworkInfoDisplay networkInfo={networkInfo} loading={loading} isMobile={true} />
+                </div>
+              </div>
+
+              {/* Summary Message */}
+              <div className="flex justify-center w-full mt-2">
                 <SummaryMessage
                   testStage={testStage}
                   isTesting={isTesting}
@@ -113,9 +120,11 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <footer className="w-full text-center text-gray-500 text-xs py-2">
-        Powered by Kavin ;)
+      <footer className="w-full text-center text-gray-500 text-[10px] sm:text-xs py-1 sm:py-2">
+        Powered by Kavin
       </footer>
-    </main>
+    </div>
   );
-}
+};
+
+export default Page;
