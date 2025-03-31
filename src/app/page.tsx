@@ -39,7 +39,7 @@ const Page = () => {
       console.log("Component unmounting, aborting any active test...");
       controller.abort();
     };
-  }, [startTestFlow]);
+  }, []); // Run only once on mount
 
   return (
     <div className="flex min-h-[100dvh] w-full flex-col items-center p-2 sm:p-3 bg-gradient-to-br from-gray-900 via-slate-900 to-black text-gray-200 font-sans">
