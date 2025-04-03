@@ -36,6 +36,7 @@ export const useNetworkInfo = (selectedServer?: string) => {
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [serverFetchAttempts, setServerFetchAttempts] = useState(0); // Track retry attempts
 
   useEffect(() => {
     // Don't run on server
@@ -134,114 +135,234 @@ export const useNetworkInfo = (selectedServer?: string) => {
       }
     };
     
-    // Modified to remove unused ipAddress parameter
+    // Add a more efficient implementation for the fetchTestServerInfo function
     const fetchTestServerInfo = async (geoData: GeoData) => {
-      if (selectedServer) return; // Skip if a server is manually selected
+      if (selectedServer) {
+        console.log("Using manually selected server:", selectedServer);
+        // TODO: Handle manually selected server here if needed
+        return;
+      }
+      
+      // If we already had rate limiting issues, skip API call and use fallback immediately
+      const skipApiCall = localStorage.getItem('mlab_api_rate_limited');
+      const rateLimit429Time = skipApiCall ? parseInt(skipApiCall, 10) : 0;
+      const now = Date.now();
+      
+      // If we were rate limited recently (within 5 minutes), use fallback directly
+      if (rateLimit429Time && now - rateLimit429Time < 5 * 60 * 1000) {
+        console.log("Recently rate limited by M-Lab API, using fallback servers directly");
+        useFallbackServer(geoData);
+        return;
+      }
       
       try {
-        // Fetch nearest M-Lab server
-        const response = await fetchWithRetry('https://locate.measurementlab.net/v2/nearest/ndt/ndt7');
-        if (response.ok) {
+        console.log(`Attempting to fetch M-Lab server info (attempt ${serverFetchAttempts + 1})...`);
+        
+        // Try to fetch from M-Lab API (with fewer retries)
+        try {
+          const response = await fetchWithRetry(
+            'https://locate.measurementlab.net/v2/nearest/ndt/ndt7',
+            {}, // Default options
+            2 // Reduce max retries to avoid excessive API calls
+          );
+          
+          // If we got rate limited, record the time so we don't try again too soon
+          if (response.status === 429) {
+            localStorage.setItem('mlab_api_rate_limited', Date.now().toString());
+            throw new Error(`Rate limited by M-Lab API (429)`);
+          }
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch M-Lab servers: ${response.status} ${response.statusText}`);
+          }
+          
+          // Clear any stored rate limit record as we succeeded
+          localStorage.removeItem('mlab_api_rate_limited');
+          
+          // Continue with normal processing of server data
           const serverData = await response.json();
           
-          if (serverData.results && serverData.results.length > 0) {
-            const server = serverData.results[0];
-            
-            // Extract server hostname and try to parse location info from it
-            const serverHostname = server.machine || '';
-            console.log("Server hostname:", serverHostname);
-            
-            // Parse hostname for location hints
-            let locationCode = '';
-            const hostnameMatch = serverHostname.match(/mlab\d+-([a-z]{3}\d+)/i);
-            if (hostnameMatch && hostnameMatch[1]) {
-              locationCode = hostnameMatch[1].substring(0, 3).toLowerCase();
-              console.log("Extracted location code from hostname:", locationCode);
-            }
-            
-            // User coordinates
-            const userLat = typeof geoData.lat === 'string' ? parseFloat(geoData.lat) : geoData.lat;
-            const userLon = typeof geoData.lon === 'string' ? parseFloat(geoData.lon) : geoData.lon;
-            
-            // Get server coordinates
-            let serverLat, serverLon;
-            let coordinateSource = "unknown";
-            
-            // Try location code mapping first
-            if (locationCode && mlabLocationCodes[locationCode]) {
-              [serverLat, serverLon] = mlabLocationCodes[locationCode];
-              coordinateSource = "m-lab code";
-            }
-            // Try exact location match next
-            else if (server.location?.city && server.location?.country) {
-              const exactLocation = `${server.location.city}, ${server.location.country}`.toLowerCase();
-              if (directLocationMapping[exactLocation]) {
-                [serverLat, serverLon] = directLocationMapping[exactLocation];
-                coordinateSource = "direct mapping";
-              } 
-              // Try city database
-              else {
-                const cityCoords = getCityCoordinates(server.location.city, server.location.country);
-                if (cityCoords.found) {
-                  serverLat = cityCoords.lat;
-                  serverLon = cityCoords.lon;
-                  coordinateSource = "city database";
-                } else {
-                  // Fallback to country
-                  const countryCoords = getCountryCoordinates(server.location.country);
-                  serverLat = countryCoords.lat;
-                  serverLon = countryCoords.lon;
-                  coordinateSource = "country database";
-                }
-              }
-            } else {
-              // Default fallback
-              serverLat = 25;
-              serverLon = -40;
-              coordinateSource = "default";
-            }
-            
-            console.log("User coordinates:", userLat, userLon);
-            console.log("Server coordinates:", serverLat, serverLon, `(source: ${coordinateSource})`);
-            
-            // Calculate distance
-            let distance = simpleDistance(userLat, userLon, serverLat, serverLon);
-            console.log("Simple distance calculation:", distance, "km");
-            
-            // Alternative calculation if needed
-            if (isNaN(distance) || distance > 20000 || distance < 1) {
-              distance = calculateDistance(userLat, userLon, serverLat, serverLon);
-              console.log("Fallback distance calculation:", distance, "km");
-            }
-            
-            console.log("Final calculated distance:", distance, "km");
-            
-            // Create test server object
-            const testServer = {
-              name: server.machine || 'Unknown',
-              location: `${server.location?.city || 'Unknown'}, ${server.location?.country || 'Unknown'}`,
-              distance: Math.round(distance),
-              urls: server.urls || {},
-            };
-            
-            // Update network info with test server data
-            setNetworkInfo(prev => {
-              if (!prev) return null;
-              return {
-                ...prev,
-                testServer
-              };
-            });
+          // Extract server hostname and try to parse location info from it
+          const server = serverData.results[0];
+          const serverHostname = server.machine || '';
+          console.log("Server hostname:", serverHostname);
+          
+          if (!serverHostname) {
+            throw new Error("Invalid server hostname received");
           }
+          
+          // Parse hostname for location hints with improved pattern matching
+          let locationCode = '';
+          const hostnameMatch = serverHostname.match(/mlab\d+-([a-z]{3}\d*)/i) || 
+                                serverHostname.match(/([a-z]{3}\d*)\.measurement-lab\.org/i);
+
+          if (hostnameMatch && hostnameMatch[1]) {
+            locationCode = hostnameMatch[1].substring(0, 3).toLowerCase();
+            console.log("Extracted location code from hostname:", locationCode);
+          }
+          
+          // User coordinates
+          const userLat = typeof geoData.lat === 'string' ? parseFloat(geoData.lat) : geoData.lat;
+          const userLon = typeof geoData.lon === 'string' ? parseFloat(geoData.lon) : geoData.lon;
+          
+          // Get server coordinates
+          let serverLat, serverLon;
+          let coordinateSource = "unknown";
+          
+          if (locationCode && mlabLocationCodes[locationCode]) {
+            [serverLat, serverLon] = mlabLocationCodes[locationCode];
+            coordinateSource = "m-lab code";
+          } else if (server.location?.city && server.location?.country) {
+            const exactLocation = `${server.location.city}, ${server.location.country}`.toLowerCase();
+            if (directLocationMapping[exactLocation]) {
+              [serverLat, serverLon] = directLocationMapping[exactLocation];
+              coordinateSource = "direct mapping";
+            } else {
+              const cityCoords = getCityCoordinates(server.location.city, server.location.country);
+              if (cityCoords.found) {
+                serverLat = cityCoords.lat;
+                serverLon = cityCoords.lon;
+                coordinateSource = "city database";
+              } else {
+                const countryCoords = getCountryCoordinates(server.location.country);
+                serverLat = countryCoords.lat;
+                serverLon = countryCoords.lon;
+                coordinateSource = "country database";
+              }
+            }
+          } else {
+            serverLat = 25;
+            serverLon = -40;
+            coordinateSource = "default";
+          }
+          
+          console.log("User coordinates:", userLat, userLon);
+          console.log("Server coordinates:", serverLat, serverLon, `(source: ${coordinateSource})`);
+          
+          let distance = simpleDistance(userLat, userLon, serverLat, serverLon);
+          console.log("Simple distance calculation:", distance, "km");
+          
+          if (isNaN(distance) || distance > 20000 || distance < 1) {
+            distance = calculateDistance(userLat, userLon, serverLat, serverLon);
+            console.log("Fallback distance calculation:", distance, "km");
+          }
+          
+          console.log("Final calculated distance:", distance, "km");
+          
+          const testServer = {
+            name: server.machine || 'Unknown',
+            location: `${server.location?.city || 'Unknown'}, ${server.location?.country || 'Unknown'}`,
+            distance: Math.round(distance),
+            urls: server.urls || {},
+          };
+          
+          if (!testServer.urls.wss) {
+            console.warn("Server missing WebSocket URL, constructing default URL");
+            
+            // Construct default WebSocket URLs based on the server hostname
+            const hostname = testServer.name;
+            if (hostname) {
+              // Create both download and upload endpoints
+              testServer.urls = {
+                ...testServer.urls,
+                wss: `wss://${hostname}/ndt/v7/download`,
+                wssUpload: `wss://${hostname}/ndt/v7/upload`, // Add upload endpoint too
+                ws: `ws://${hostname}/ndt/v7/download`,
+                wsUpload: `ws://${hostname}/ndt/v7/upload` // Add upload endpoint too
+              };
+              console.log("Constructed WebSocket URLs:", testServer.urls.wss, testServer.urls.wssUpload);
+            } else {
+              console.error("Cannot construct WebSocket URL: missing hostname");
+            }
+          }
+          
+          // Validate that we have the necessary URLs now
+          if (!testServer.urls.wss) {
+            console.error("Server still missing WebSocket URL after fallback, tests will likely fail");
+          }
+          
+          setNetworkInfo(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              testServer
+            };
+          });
+          
+          setServerFetchAttempts(0);
+          
+        } catch (apiError) {
+          console.warn("Could not fetch M-Lab servers from API, using fallback server list:", apiError);
+          
+          // Use fallback servers
+          useFallbackServer(geoData);
+          return;
         }
+        
       } catch (serverError) {
         console.warn('Could not fetch M-Lab servers:', serverError);
-        // Continue without test server info - the UI will show a message
+        
+        if (serverFetchAttempts < 2) {
+          setServerFetchAttempts(prev => prev + 1);
+          
+          const retryDelay = Math.pow(2, serverFetchAttempts) * 2000;
+          console.log(`Will retry fetching server info in ${retryDelay/1000} seconds...`);
+          
+          setTimeout(() => {
+            fetchTestServerInfo(geoData);
+          }, retryDelay);
+        } else {
+          setError(`Unable to find test servers. Please try again later. (${serverError instanceof Error ? serverError.message : 'Unknown error'})`);
+        }
       }
     };
 
+    // Extract the fallback server logic to its own function
+    const useFallbackServer = (geoData: GeoData) => {
+      // Get fallback servers based on location
+      const fallbackServers = getFallbackServerList(geoData);
+      
+      if (fallbackServers.length === 0) {
+        setError("No fallback servers available. Please try again later.");
+        return;
+      }
+      
+      // Use the first (closest) fallback server
+      const fallbackServer = fallbackServers[0];
+      
+      // Create a test server object from the fallback
+      const testServer = {
+        name: fallbackServer.hostname,
+        location: fallbackServer.location,
+        distance: fallbackServer.distance,
+        urls: {
+          wss: `wss://${fallbackServer.hostname}/ndt/v7/download`,
+          wssUpload: `wss://${fallbackServer.hostname}/ndt/v7/upload`,
+          ws: `ws://${fallbackServer.hostname}/ndt/v7/download`,
+          wsUpload: `ws://${fallbackServer.hostname}/ndt/v7/upload`
+        }
+      };
+      
+      console.log("Using fallback server:", testServer.name);
+      
+      setNetworkInfo(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          testServer
+        };
+      });
+      
+      // Reset attempts counter since we successfully used a fallback
+      setServerFetchAttempts(0);
+    };
+
     fetchIPAndLocation();
-  }, [selectedServer]);
+    
+    return () => {
+      // Cleanup function - consider adding an abort controller if needed
+    };
+  }, [selectedServer, serverFetchAttempts]);
 
   return { networkInfo, loading, error };
 };
@@ -249,80 +370,82 @@ export const useNetworkInfo = (selectedServer?: string) => {
 // Add these helper functions:
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const fetchWithRetry = async (url: string, options: RequestInit = {}, maxRetries = 3) => {
+// Enhance the fetchWithRetry function with better backoff
+const fetchWithRetry = async (url: string, options: RequestInit = {}, maxRetries = 5) => {
   let retries = 0;
   let backoffTime = 2000; // Start with 2 second delay
+  let lastError: Error | null = null;
   
   while (retries < maxRetries) {
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(url, {
+        ...options,
+        signal: options.signal || AbortSignal.timeout(10000)
+      });
       
       if (response.status === 429) {
-        // Rate limited - backoff and retry
-        console.log(`Rate limited (429). Retrying in ${backoffTime/1000} seconds...`);
-        await delay(backoffTime);
-        backoffTime *= 2; // Exponential backoff
+        // Get retry-after header if available or use exponential backoff
+        const retryAfter = response.headers.get('Retry-After');
+        const waitTime = retryAfter ? parseInt(retryAfter, 10) * 1000 : backoffTime;
+        
+        console.log(`Rate limited (429). Retrying in ${waitTime/1000} seconds...`);
+        await delay(waitTime);
+        backoffTime = Math.min(backoffTime * 2, 30000); // Cap at 30 seconds
         retries++;
-      } else {
-        return response; // Return successful response
+        continue;
       }
+      
+      return response;
     } catch (error) {
-      // For network errors, also retry
-      console.error("Network error during fetch:", error);
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`Network error during fetch (attempt ${retries + 1}/${maxRetries}):`, error);
+      
+      if (error instanceof DOMException && error.name === "AbortError") {
+        console.warn("Request aborted (timeout or manual abort)");
+      }
+      
       await delay(backoffTime);
-      backoffTime *= 2;
+      backoffTime = Math.min(backoffTime * 2, 30000); // Cap at 30 seconds
       retries++;
     }
   }
   
-  // If we've exhausted retries, throw an error
-  throw new Error("API is rate limited. Please try again later.");
+  throw lastError || new Error("Failed after maximum retry attempts");
 };
 
 // Direct mapping of M-Lab location codes to exact coordinates
-// These are specifically for M-Lab servers based on their location codes
 const mlabLocationCodes: Record<string, [number, number]> = {
-  // India locations
-  'maa': [13.0827, 80.2707], // Chennai (Madras)
-  'del': [28.5562, 77.1000], // Delhi
-  'bom': [19.0896, 72.8656], // Mumbai
-  
-  // US locations
-  'lga': [40.7769, -73.8740], // New York LaGuardia
-  'jfk': [40.6413, -73.7781], // New York JFK
-  'lax': [33.9416, -118.4085], // Los Angeles
-  'ord': [41.9742, -87.9073], // Chicago O'Hare
-  'sfo': [37.6213, -122.3790], // San Francisco
-  'dfw': [32.8998, -97.0403], // Dallas Fort Worth
-  'sea': [47.4502, -122.3088], // Seattle
-  'iad': [38.9531, -77.4565], // Washington Dulles
-  'atl': [33.6407, -84.4277], // Atlanta
-  'den': [39.8561, -104.6737], // Denver
-  'mia': [25.7959, -80.2871], // Miami
-  
-  // Europe locations
-  'lhr': [51.4700, -0.4543], // London Heathrow
-  'cdg': [49.0097, 2.5479], // Paris Charles de Gaulle
-  'fra': [50.0379, 8.5622], // Frankfurt
-  'ams': [52.3105, 4.7683], // Amsterdam
-  
-  // Asia Pacific
-  'hnd': [35.5494, 139.7798], // Tokyo Haneda
-  'syd': [-33.9399, 151.1753], // Sydney
-  'sin': [1.3644, 103.9915], // Singapore
-  'hkg': [22.3080, 113.9185], // Hong Kong
-  
-  // Other
-  'dxb': [25.2532, 55.3657], // Dubai
-  'gru': [-23.4357, -46.4731], // São Paulo
-  'yyz': [43.6777, -79.6248], // Toronto
-  'mex': [19.4363, -99.0721], // Mexico City
-  'mad': [40.4983, -3.5676], // Madrid
-  'cpt': [-33.9648, 18.6017], // Cape Town
-  'jnb': [-26.1367, 28.2412], // Johannesburg
+  'maa': [13.0827, 80.2707],
+  'del': [28.5562, 77.1000],
+  'bom': [19.0896, 72.8656],
+  'lga': [40.7769, -73.8740],
+  'jfk': [40.6413, -73.7781],
+  'lax': [33.9416, -118.4085],
+  'ord': [41.9742, -87.9073],
+  'sfo': [37.6213, -122.3790],
+  'dfw': [32.8998, -97.0403],
+  'sea': [47.4502, -122.3088],
+  'iad': [38.9531, -77.4565],
+  'atl': [33.6407, -84.4277],
+  'den': [39.8561, -104.6737],
+  'mia': [25.7959, -80.2871],
+  'lhr': [51.4700, -0.4543],
+  'cdg': [49.0097, 2.5479],
+  'fra': [50.0379, 8.5622],
+  'ams': [52.3105, 4.7683],
+  'hnd': [35.5494, 139.7798],
+  'syd': [-33.9399, 151.1753],
+  'sin': [1.3644, 103.9915],
+  'hkg': [22.3080, 113.9185],
+  'dxb': [25.2532, 55.3657],
+  'gru': [-23.4357, -46.4731],
+  'yyz': [43.6777, -79.6248],
+  'mex': [19.4363, -99.0721],
+  'mad': [40.4983, -3.5676],
+  'cpt': [-33.9648, 18.6017],
+  'jnb': [-26.1367, 28.2412],
 };
 
-// Direct mapping for specific locations
 const directLocationMapping: Record<string, [number, number]> = {
   "chennai, india": [13.0827, 80.2707],
   "delhi, india": [28.5562, 77.1000],
@@ -336,15 +459,13 @@ const directLocationMapping: Record<string, [number, number]> = {
   "singapore, singapore": [1.3521, 103.8198],
 };
 
-// Simple, fast distance calculation using the Haversine formula
 function simpleDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
     return 0;
   }
   
-  // Convert to radians
   const toRad = (x: number) => x * Math.PI / 180;
-  const R = 6371; // Earth radius in km
+  const R = 6371;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   
@@ -357,15 +478,12 @@ function simpleDistance(lat1: number, lon1: number, lat2: number, lon2: number):
   return R * c;
 }
 
-// Function to get more precise city coordinates
 function getCityCoordinates(city?: string, country?: string): { lat: number, lon: number, found: boolean } {
   if (!city) return { lat: 0, lon: 0, found: false };
   
   const cityKey = `${city.toLowerCase()}${country ? '_' + country.toLowerCase() : ''}`;
   
-  // Extended city database with more precise coordinates
   const cityCoordinates: Record<string, [number, number]> = {
-    // North America
     'new york_us': [40.7128, -74.0060],
     'los angeles_us': [34.0522, -118.2437],
     'chicago_us': [41.8781, -87.6298],
@@ -384,8 +502,6 @@ function getCityCoordinates(city?: string, country?: string): { lat: number, lon
     'montreal_ca': [45.5017, -73.5673],
     'vancouver_ca': [49.2827, -123.1207],
     'mexico city_mx': [19.4326, -99.1332],
-    
-    // Europe
     'london_gb': [51.5074, -0.1278],
     'paris_fr': [48.8566, 2.3522],
     'berlin_de': [52.5200, 13.4050],
@@ -402,8 +518,6 @@ function getCityCoordinates(city?: string, country?: string): { lat: number, lon
     'zurich_ch': [47.3769, 8.5417],
     'lisbon_pt': [38.7223, -9.1393],
     'dublin_ie': [53.3498, -6.2603],
-    
-    // Asia
     'tokyo_jp': [35.6762, 139.6503],
     'delhi_in': [28.6139, 77.2090],
     'shanghai_cn': [31.2304, 121.4737],
@@ -417,37 +531,28 @@ function getCityCoordinates(city?: string, country?: string): { lat: number, lon
     'taipei_tw': [25.0330, 121.5654],
     'kuala lumpur_my': [3.1390, 101.6869],
     'jakarta_id': [6.2088, 106.8456],
-    
-    // Australia/Oceania
     'sydney_au': [-33.8688, 151.2093],
     'melbourne_au': [-37.8136, 144.9631],
     'brisbane_au': [-27.4698, 153.0251],
     'perth_au': [-31.9505, 115.8605],
     'auckland_nz': [-36.8509, 174.7645],
-    
-    // Africa
     'cairo_eg': [30.0444, 31.2357],
     'lagos_ng': [6.5244, 3.3792],
     'johannesburg_za': [-26.2041, 28.0473],
     'cape town_za': [-33.9249, 18.4241],
-    
-    // South America
     'são paulo_br': [-23.5505, -46.6333],
     'rio de janeiro_br': [-22.9068, -43.1729],
     'buenos aires_ar': [-34.6037, -58.3816],
     'bogotá_co': [4.7110, -74.0721],
     'santiago_cl': [-33.4489, -70.6693],
     'lima_pe': [-12.0464, -77.0428],
-    // Add more cities as needed
   };
   
-  // First try exact match with country
   if (cityCoordinates[cityKey]) {
     const [lat, lon] = cityCoordinates[cityKey];
     return { lat, lon, found: true };
   }
   
-  // Then try just the city name
   const cityOnlyKey = city.toLowerCase();
   for (const key in cityCoordinates) {
     if (key.startsWith(cityOnlyKey + '_')) {
@@ -459,13 +564,11 @@ function getCityCoordinates(city?: string, country?: string): { lat: number, lon
   return { lat: 0, lon: 0, found: false };
 }
 
-// Function to get country coordinates
 function getCountryCoordinates(country?: string): { lat: number, lon: number } {
   if (!country) return { lat: 0, lon: 0 };
   
   const countryLower = country.toLowerCase();
   
-  // Extended country database with more precise central coordinates
   const countryCoordinates: Record<string, [number, number]> = {
     'united states': [39.8283, -98.5795],
     'us': [39.8283, -98.5795],
@@ -521,7 +624,6 @@ function getCountryCoordinates(country?: string): { lat: number, lon: number } {
     'uae': [23.4241, 53.8478],
     'united arab emirates': [23.4241, 53.8478],
     'israel': [31.0461, 34.8516],
-    // Add more countries as needed
   };
   
   if (countryCoordinates[countryLower]) {
@@ -529,25 +631,98 @@ function getCountryCoordinates(country?: string): { lat: number, lon: number } {
     return { lat, lon };
   }
   
-  // Return default (mid-Atlantic) if country not found
   return { lat: 25.0, lon: -40.0 };
 }
 
-// More accurate distance calculation using Haversine (same as simpleDistance, kept for clarity)
-// This is the primary calculation used when simpleDistance yields odd results.
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
-    return 0; // Return 0 or handle error appropriately
+    return 0;
   }
   
-  const R = 6371; // Radius of the Earth in km
-  const dLat = (lat2 - lat1) * Math.PI / 180; // Convert degrees to radians
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = 
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
-  const distance = R * c; // Distance in km
+  const distance = R * c;
   return distance;
+}
+
+// Add a function to provide fallback servers based on geographical region
+function getFallbackServerList(geoData: GeoData): Array<{hostname: string, location: string, distance: number}> {
+  // A list of reliable M-Lab servers that can be used as fallbacks
+  const globalFallbackServers = [
+    // US servers
+    {hostname: 'ndt-mlab1-lga03.mlab-oti.measurement-lab.org', location: 'New York, United States', region: 'na'},
+    {hostname: 'ndt-mlab1-lax03.mlab-oti.measurement-lab.org', location: 'Los Angeles, United States', region: 'na'},
+    {hostname: 'ndt-mlab1-den04.mlab-oti.measurement-lab.org', location: 'Denver, United States', region: 'na'},
+    {hostname: 'ndt-mlab1-ord05.mlab-oti.measurement-lab.org', location: 'Chicago, United States', region: 'na'},
+    
+    // Europe servers
+    {hostname: 'ndt-mlab1-lhr05.mlab-oti.measurement-lab.org', location: 'London, United Kingdom', region: 'eu'},
+    {hostname: 'ndt-mlab1-ams03.mlab-oti.measurement-lab.org', location: 'Amsterdam, Netherlands', region: 'eu'},
+    {hostname: 'ndt-mlab1-fra05.mlab-oti.measurement-lab.org', location: 'Frankfurt, Germany', region: 'eu'},
+    
+    // Asia servers
+    {hostname: 'ndt-mlab1-nrt02.mlab-oti.measurement-lab.org', location: 'Tokyo, Japan', region: 'as'},
+    {hostname: 'ndt-mlab1-sin01.mlab-oti.measurement-lab.org', location: 'Singapore', region: 'as'},
+    
+    // Australia/Oceania
+    {hostname: 'ndt-mlab1-syd02.mlab-oti.measurement-lab.org', location: 'Sydney, Australia', region: 'oc'},
+  ];
+  
+  // Try to determine user's region to prioritize nearby servers
+  let userRegion = 'na'; // Default to North America
+  if (geoData.country) {
+    const country = geoData.country.toLowerCase();
+    
+    if (['us', 'ca', 'mx'].includes(country)) {
+      userRegion = 'na'; // North America
+    } else if (['gb', 'de', 'fr', 'it', 'es', 'nl', 'ch', 'se', 'dk', 'no', 'fi', 'pl', 'at', 'be', 'ie', 'pt'].includes(country)) {
+      userRegion = 'eu'; // Europe
+    } else if (['jp', 'cn', 'kr', 'in', 'sg', 'th', 'vn', 'hk', 'tw', 'my', 'id', 'ph'].includes(country)) {
+      userRegion = 'as'; // Asia
+    } else if (['au', 'nz'].includes(country)) {
+      userRegion = 'oc'; // Oceania
+    }
+  }
+  
+  // Calculate estimated distances for sorting
+  const serverList = globalFallbackServers.map(server => {
+    let distance = 10000; // Default high distance
+    
+    // If we know user coordinates, calculate a more accurate distance
+    if (geoData.lat && geoData.lon) {
+      const userLat = typeof geoData.lat === 'string' ? parseFloat(geoData.lat) : geoData.lat;
+      const userLon = typeof geoData.lon === 'string' ? parseFloat(geoData.lon) : geoData.lon;
+      
+      // Get server coordinates
+      let serverLat = 0, serverLon = 0;
+      
+      // Extract location code from hostname
+      const hostnameMatch = server.hostname.match(/mlab\d+-([a-z]{3}\d*)/i);
+      if (hostnameMatch && hostnameMatch[1]) {
+        const locationCode = hostnameMatch[1].substring(0, 3).toLowerCase();
+        if (mlabLocationCodes[locationCode]) {
+          [serverLat, serverLon] = mlabLocationCodes[locationCode];
+        }
+      }
+      
+      distance = simpleDistance(userLat, userLon, serverLat, serverLon);
+    } else {
+      // Approximate distance based on region match
+      distance = server.region === userRegion ? 1000 : 5000;
+    }
+    
+    return {
+      ...server,
+      distance: Math.round(distance)
+    };
+  });
+  
+  // Sort by distance (closest first)
+  return serverList.sort((a, b) => a.distance - b.distance);
 }

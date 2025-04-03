@@ -1,53 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
 import { 
   ErrorDisplay, 
-  SummaryMessage,
-  TestButton,
-  UnitToggle,
-  SpeedGraph
+  NetworkInfoDisplay,
+  ResultsDisplay,
+  SummaryMessage  
 } from '../components/speedtest';
-import NetworkInfoDisplay from '../components/speedtest/NetworkInfoDisplay';
-import { useSpeedTest } from '../hooks/useSpeedTest';
 import { useNetworkInfo } from '../hooks/useNetworkInfo';
 
 const Page = () => {
-  const {
-    ping,
-    isTesting,
-    testStage,
-    error,
-    displayUnit,
-    displayDownloadSpeed,
-    displayUploadSpeed,
-    displayCurrentSpeed,
-    statusText,
-    graphData,
-    handleRestartTest,
-    toggleUnit,
-    startTestFlow
-  } = useSpeedTest();
-
-  const { networkInfo, loading } = useNetworkInfo();
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const controller = new AbortController();
-    startTestFlow(controller);
-    return () => {
-      console.log("Component unmounting, aborting any active test...");
-      controller.abort();
-    };
-  }, []); // Run only once on mount
+  const { networkInfo, loading, error } = useNetworkInfo();
+  const displayUnit = 'Mbps'; // Default unit
 
   return (
     <div className="flex min-h-[100dvh] w-full flex-col items-center p-2 sm:p-3 bg-gradient-to-br from-gray-900 via-slate-900 to-black text-gray-200 font-sans">
-      {/* Settings Toggle */}
-      <div className="w-full max-w-5xl flex flex-wrap justify-end items-center mb-2 sm:mb-1">
-        <UnitToggle displayUnit={displayUnit} toggleUnit={toggleUnit} />
-      </div>
-
       {/* Content Container */}
       <div className="flex flex-col items-center w-full flex-grow">
         <div className="w-full max-w-5xl mx-auto text-center flex flex-col items-center">
@@ -66,54 +32,23 @@ const Page = () => {
               <NetworkInfoDisplay networkInfo={networkInfo} loading={loading} />
             </div>
 
-            {/* Speed Graph and Controls */}
-            <div className="w-full space-y-2 sm:space-y-3">
-              <SpeedGraph
-                graphData={graphData}
-                displayUnit={displayUnit}
-                testStage={testStage}
-                isTesting={isTesting}
-                currentSpeedMbps={displayCurrentSpeed}
-                statusText={statusText}
-                error={error}
-                compact={false}
-                ping={ping}
-                downloadSpeed={displayDownloadSpeed}
-                uploadSpeed={displayUploadSpeed}
-              />
+            {/* Error Display */}
+            {error && <ErrorDisplay error={error} />}
 
-              {/* Error Display */}
-              {error && <ErrorDisplay error={error} />}
+            {/* Results Display with Speed Graph */}
+            <ResultsDisplay
+              downloadSpeed="65"
+              uploadSpeed="40"
+              displayUnit={displayUnit}
+              ping={15}
+            />
 
-              {/* Desktop Test Button */}
-              <div className="hidden sm:flex justify-center">
-                <TestButton isTesting={isTesting} onRestart={handleRestartTest} />
-              </div>
+            {/* Summary Message */}
+            <SummaryMessage displayUnit={displayUnit} />
 
-              {/* Mobile Layout */}
-              <div className="flex sm:hidden flex-col space-y-2">
-                {/* Mobile Test Button */}
-                <div className="flex justify-center">
-                  <TestButton isTesting={isTesting} onRestart={handleRestartTest} />
-                </div>
-
-                {/* Mobile Network Info */}
-                <div className="w-full">
-                  <NetworkInfoDisplay networkInfo={networkInfo} loading={loading} isMobile={true} />
-                </div>
-              </div>
-
-              {/* Summary Message */}
-              <div className="flex justify-center w-full mt-2">
-                <SummaryMessage
-                  testStage={testStage}
-                  isTesting={isTesting}
-                  error={error}
-                  downloadSpeed={displayDownloadSpeed}
-                  uploadSpeed={displayUploadSpeed}
-                  displayUnit={displayUnit}
-                />
-              </div>
+            {/* Mobile Network Info */}
+            <div className="sm:hidden w-full">
+              <NetworkInfoDisplay networkInfo={networkInfo} loading={loading} isMobile={true} />
             </div>
           </div>
         </div>
